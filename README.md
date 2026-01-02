@@ -73,4 +73,4 @@ Dự án gồm frontend + backend + database + AI model đã chạy đầy đủ
 
 ## ℹ️ Chi tiết dự án
 
-Chi tiết dự án vui lòng tham khảo trong báo cáo
+Chi tiết dự án vui lòng tham khảo trong báo cáo tại [đây](https://drive.google.com/uc?export=download&id=1YEc06GDoh3Ez3qjNSXSq-O7JkYZHomzl)
