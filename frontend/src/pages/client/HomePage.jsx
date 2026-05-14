@@ -29,6 +29,7 @@ import { Taskbar } from "../../components/home/Taskbar";
 import { useNavigate } from "react-router-dom";
 import { getProduct } from "../../services/ProductAPI";
 import { getCategoryWithProduct } from "../../services/CategoryAPI";
+import { BACKEND_URL } from "../../utils/config";
 import BannerImg1 from "../../assets/banner/banner1.png";
 import BannerImg2 from "../../assets/banner/banner2.png";
 import BannerImg3 from "../../assets/banner/banner3.png";
@@ -160,7 +161,7 @@ export default function Home() {
         setLoadingCategories(true);
         setCategoryError(null);
 
-        const res = await fetch("http://localhost:8081/api/category");
+        const res = await fetch(`${BACKEND_URL}/api/category`);
         console.log(res);
 
         if (!res.ok) {
@@ -343,7 +344,7 @@ export default function Home() {
       {/* Special Offers */}
       <ProductSection
         title="Popular Products"
-        apiUrl="http://localhost:8081/api/product/top-buyer"
+        apiUrl={`${BACKEND_URL}/api/product/top-buyer`}
         viewAllHref={"/products?sort=popular"}
       />
 
@@ -355,7 +356,7 @@ export default function Home() {
       />
       <ProductSection
         title="Best Rate Products"
-        apiUrl="http://localhost:8081/api/product/top-rated"
+        apiUrl={`${BACKEND_URL}/api/product/top-rated`}
         viewAllHref="/products?sort=rating"
       />
 

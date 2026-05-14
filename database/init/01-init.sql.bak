@@ -1,0 +1,25 @@
+-- ============================================================
+-- 01-init.sql — Docker MySQL init script
+-- Runs automatically on first container start (empty volume)
+-- ============================================================
+
+-- 1. Create database (if not exists)
+CREATE DATABASE IF NOT EXISTS `e_commerce_web`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE `e_commerce_web`;
+
+-- 2. Import schema + seed data from database.sql
+--    (database.sql is mounted and sourced via docker-compose command)
+--    The actual table creation and data insertion is handled by
+--    sourcing database.sql before this script, or by combining them.
+
+-- 3. Create least-privilege user for backend-secure
+--    This user can only SELECT, INSERT, UPDATE — NO DROP, DELETE, ALTER, CREATE, TRUNCATE
+CREATE USER IF NOT EXISTS 'app_secure'@'%' IDENTIFIED BY 'SecurePass@2024';
+GRANT SELECT, INSERT, UPDATE ON `e_commerce_web`.* TO 'app_secure'@'%';
+FLUSH PRIVILEGES;
+
+-- Verification (optional, shows grants in Docker logs)
+SHOW GRANTS FOR 'app_secure'@'%';

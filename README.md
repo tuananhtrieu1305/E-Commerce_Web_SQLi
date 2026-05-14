@@ -1,76 +1,91 @@
-# 🛒 Tech Store Website
+# 🛒 E-Commerce Web Security Demo
 
-Website bán đồ công nghệ gồm ba thành phần: Frontend (React + Vite), Backend (Spring Boot) và Database (MySQL).
+Website bán hàng công nghệ được thiết kế theo mô hình **A/B Testing** nhằm đối chứng và kiểm chứng hiệu quả của phương pháp phòng chống SQL Injection thông qua **Database-Level Defense Layer** (Bảo mật 2 lớp).
+
+Hệ thống cung cấp sẵn hai phiên bản Backend chạy song song:
+1. **Vulnerable Backend:** Code bị cố tình để lọt lỗ hổng bảo mật, nối chuỗi SQL trực tiếp, sử dụng tài khoản Database `root`.
+2. **Secure Backend:** Áp dụng "Defense-in-Depth". Sử dụng prepared statements (JPA/Hibernate kết hợp Stored Procedures), phân quyền nguyên tắc tối thiểu (`app_secure` least privilege user) và các ràng buộc dữ liệu trực tiếp tại MySQL (Check Constraints, Triggers, Views).
+
+---
 
 ## 📂 Cấu trúc dự án
 
-
 ```bash
 project-root/
-|── frontend/    # React + Vite
-|── backend/     # Spring Boot
-└── database/    # Database script (.sql)
+├── frontend/             # React + Vite (Cổng giao tiếp UI)
+├── backend-vulnerable/   # Spring Boot (Chứa lỗ hổng SQLi) - Port 8081
+├── backend-secure/       # Spring Boot (Bảo mật 2 lớp) - Port 8082
+├── database/             # Scripts khởi tạo cấu trúc và dữ liệu cho DB
+│   └── init/             # Chứa các file SQL tạo Views, Triggers, Procedures, Users
+├── docker-compose.yml    # File cấu hình môi trường Docker
+└── .env                  # Cấu hình biến môi trường
 ```
 
-## 🚀 Hướng dẫn cài đặt
-1️⃣ Clone dự án
+---
+
+## 🚀 Hướng dẫn cài đặt và khởi chạy (Với Docker)
+
+Dự án đã được "Docker hóa" (containerization) hoàn toàn, bạn **không cần** cài đặt Java, Node.js hay MySQL trên máy thật.
+
+### Yêu cầu tiên quyết:
+- Đã cài đặt [Docker](https://docs.docker.com/get-docker/) và Docker Compose trên máy.
+- Đã cài đặt Git.
+
+### Bước 1: Clone dự án
 ```bash
 git clone https://github.com/tuananhtrieu1305/E-Commerce_Web.git
+cd E-Commerce_Web
 ```
-2️⃣ Cài đặt Ollama + Model phi3:mini
 
-Cài Ollama tại: [Ollama](https://ollama.com/)
-
-Tải model:
+### Bước 2: Khởi chạy toàn bộ hệ thống
+Mở terminal tại thư mục gốc của dự án (`project-root`) và chạy lệnh sau:
 ```bash
-ollama pull phi3:mini
+docker compose up -d
 ```
-3️⃣ Thiết lập MySQL Database
+Lệnh này sẽ tự động:
+- Khởi tạo Database MySQL và tự động chạy các script phân quyền, tạo dữ liệu mẫu.
+- Build và chạy `backend-vulnerable` (Cổng 8081).
+- Build và chạy `backend-secure` (Cổng 8082).
+- Build và chạy `frontend` (Cổng 5173).
 
-B1: Mở MySQL Workbench
+*Lưu ý: Quá trình pull images và build ở lần đầu tiên có thể mất vài phút.*
 
-B2: Chọn Server → Data Import
+### Bước 3: Truy cập ứng dụng
+Sau khi các container báo trạng thái `Healthy/Started`, bạn truy cập vào Frontend qua trình duyệt:
+👉 **[http://localhost:5173](http://localhost:5173)**
 
-B3: Import file:
+---
+
+## 🔄 Cách chuyển đổi (Switch) giữa hai chế độ test
+
+Mặc định, Frontend sẽ gọi API tới **Secure Backend** (Cổng 8082). Để đối chứng và test các lỗ hổng trên **Vulnerable Backend** (Cổng 8081), bạn làm như sau:
+
+1. Mở file `.env` ở thư mục gốc của dự án.
+2. Sửa biến `VITE_BACKEND_URL`:
+   - Để dùng bản **bảo mật**: `VITE_BACKEND_URL=http://localhost:8082`
+   - Để dùng bản **cố tình để hổng**: `VITE_BACKEND_URL=http://localhost:8081`
+3. Cập nhật lại cấu hình cho Frontend container mà không cần build lại:
 ```bash
-database/database.sql
+docker compose up -d
 ```
-B4: Đảm bảo MySQL chạy ở cổng 80 (localhost:80)
+4. F5 lại trình duyệt và tiến hành test các payload SQL Injection.
 
-4️⃣ Chạy Backend (Spring Boot)
+---
 
-Mở thư mục backend
+## 🛑 Cách dừng ứng dụng
+
+Để tắt hệ thống và dừng các container, chạy lệnh:
 ```bash
-cd backend
+docker compose down
 ```
-Cài dependencies
 
-IntelliJ IDEA sẽ tự tải, hoặc tự chạy:
+Nếu muốn xóa toàn bộ cả database để lần sau hệ thống tự tạo mới lại dữ liệu từ đầu, thêm cờ `-v`:
 ```bash
-mvn clean install
+docker compose down -v
 ```
-Cấu hình application.properties.uat
-```bash
-spring.datasource.url=jdbc:mysql://localhost:80/<database_name>
-spring.datasource.username=root
-spring.datasource.password=<your_password>
-```
-Chạy project
 
-Chạy file:
-```bash
-src/main/java/.../ProjectApplication.java
-```
-5️⃣ Chạy Frontend (React + Vite)
-```bash
-cd ../frontend
-npm install
-npm run dev
-```
-## 🎉 Hoàn tất
+---
 
-Dự án gồm frontend + backend + database + AI model đã chạy đầy đủ trên máy bạn.
+## ℹ️ Tài liệu tham khảo
 
-## ℹ️ Chi tiết dự án
-
-Chi tiết dự án vui lòng tham khảo trong báo cáo tại [đây](https://drive.google.com/uc?export=download&id=1YEc06GDoh3Ez3qjNSXSq-O7JkYZHomzl)
+Chi tiết về thiết kế kiến trúc, các lỗi đã fix và cách hệ thống phòng chống Data Manipulation ở tầng Database vui lòng tham khảo **Báo cáo Đồ án** của dự án.

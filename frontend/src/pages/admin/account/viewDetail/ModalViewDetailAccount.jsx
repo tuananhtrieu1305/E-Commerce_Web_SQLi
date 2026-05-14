@@ -2,10 +2,11 @@ import { Modal, Tabs, Image, Divider, Tag } from "antd";
 import ProfileTab from "./ProfileTab";
 import Anonymous from "../../../../assets/profilePics/Anonymous.png";
 import OrderTab from "./OrderTab";
+import { BACKEND_URL } from "../../../../utils/config";
 
 const ModalViewDetailAccount = (props) => {
   const { openAccountDetail, accountDataDetail, setOpenAccountDetail } = props;
-  const avatar_url = `${import.meta.env.VITE_BACKEND_URL}${
+  const avatar_url = `${BACKEND_URL}${
     accountDataDetail?.profile?.image
   }`;
 

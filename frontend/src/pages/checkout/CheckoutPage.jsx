@@ -14,6 +14,7 @@ import {
   Package,
   Gift,
 } from "lucide-react";
+import { BACKEND_URL } from "../../utils/config";
 
 export default function CheckoutPage() {
   const {
@@ -342,7 +343,7 @@ export default function CheckoutPage() {
                     >
                       <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 flex-shrink-0">
                         <img
-                          src={`${import.meta.env.VITE_BACKEND_URL}${
+                          src={`${BACKEND_URL}${
                             item.image
                           }`}
                           alt={item.productTitle}

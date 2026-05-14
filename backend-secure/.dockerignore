@@ -1,0 +1,32 @@
+# Bỏ qua thư mục build của Maven (Quan trọng nhất)
+target
+
+# Bỏ qua IDE config
+.idea
+*.iml
+.vscode
+.settings
+.project
+.classpath
+
+# Bỏ qua Maven wrapper (dùng Maven trong Docker image rồi)
+.mvn
+mvnw
+mvnw.cmd
+
+# Bỏ qua file upload của máy thật
+uploads
+
+# Bỏ qua Git
+.git
+.gitignore
+.gitattributes
+
+# Bỏ qua file Docker (đỡ copy chính nó vào)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Bỏ qua log
+*.log
+logs

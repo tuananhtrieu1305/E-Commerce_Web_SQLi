@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { updateAccount } from "../../services/AccountAPI";
 import { message } from "antd";
+import { BACKEND_URL } from "../../utils/config";
 
 const DEFAULT_AVATAR = "https://via.placeholder.com/150";
 
@@ -49,7 +50,7 @@ export default function ProfileUpdatePage() {
 
       setAvatar(
         user.profile?.image
-          ? `${import.meta.env.VITE_BACKEND_URL}${user.profile.image}`
+          ? `${BACKEND_URL}${user.profile.image}`
           : DEFAULT_AVATAR
       );
     } catch (err) {

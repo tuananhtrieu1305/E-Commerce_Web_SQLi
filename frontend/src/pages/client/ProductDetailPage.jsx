@@ -20,6 +20,7 @@ import { useParams } from "react-router-dom";
 import { message } from "antd";
 import ProductReviews from "../../components/product/ProductReview";
 import { apiAddItem } from "../../services/cartService";
+import { BACKEND_URL } from "../../utils/config";
 // Mock template cho product (dùng làm default + bổ sung field không có trong BE)
 const mockProductTemplate = {
   id: null,
@@ -103,7 +104,7 @@ export default function ProductDetailPage() {
       try {
         setLoading(true);
         // TODO: nếu bạn có proxy / apiFetch thì đổi URL này cho khớp
-        const res = await fetch(`http://localhost:8081/api/product?id=${id}`);
+        const res = await fetch(`${BACKEND_URL}/api/product?id=${id}`);
         const json = await res.json();
         const apiProduct =
           json?.data && json.data.length > 0 ? json.data[0] : null;
@@ -116,7 +117,7 @@ export default function ProductDetailPage() {
           if (apiProduct.imagePaths && apiProduct.imagePaths.length > 0) {
             imagesFromApi = apiProduct.imagePaths.map(
               (img) =>
-                `${import.meta.env.VITE_BACKEND_URL}${img.image_path}` || ""
+                `${BACKEND_URL}${img.image_path}` || ""
             );
           }
 

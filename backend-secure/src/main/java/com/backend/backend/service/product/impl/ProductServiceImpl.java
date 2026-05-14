@@ -1,0 +1,613 @@
+package com.backend.backend.service.product.impl;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.backend.backend.builder.product.ProductSearchBuilder;
+import com.backend.backend.converter.product.ProductDTOConverter;
+import com.backend.backend.converter.product.ProductSearchBuilderConverter;
+import com.backend.backend.model.product.ProductDTO;
+import com.backend.backend.repository.category.CategoryRepository;
+import com.backend.backend.repository.category.entity.CategoryEntity;
+import com.backend.backend.repository.product.ProductImageRepository;
+import com.backend.backend.repository.product.ProductRepository;
+import com.backend.backend.repository.product.SellerRepository;
+import com.backend.backend.repository.product.entity.ProductEntity;
+import com.backend.backend.repository.product.entity.ProductImageEntity;
+import com.backend.backend.repository.product.entity.SellerEntity;
+import com.backend.backend.repository.product.specification.ChatbotProductSpecification;
+import com.backend.backend.repository.product.specification.ProductSpecification;
+import com.backend.backend.model.request.ProductCreateRequest;
+import com.backend.backend.model.request.ProductUpdateRequest;
+import com.backend.backend.service.product.ProductService;
+import com.backend.backend.utils.ImageUtil;
+import com.backend.backend.utils.exception.DuplicateRecordException;
+import com.backend.backend.utils.exception.ResourceNotFoundException;
+
+@Service
+public class ProductServiceImpl implements ProductService {
+    @Autowired
+    private ProductSearchBuilderConverter productSearchBuilderConverter;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private SellerRepository sellerRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    @Autowired
+    private ProductImageRepository productImageRepository;
+
+    @Autowired
+    private ProductDTOConverter productDTOConverter;
+
+    @Override
+    public List<ProductDTO> getProduct(Map<String, Object> params) {
+        ProductSearchBuilder productSearchBuilder = productSearchBuilderConverter.paramsToBuilder(params);
+        Specification<ProductEntity> spec = ProductSpecification.findByCriteria(productSearchBuilder);
+        List<ProductEntity> entities = productRepository.findAll(spec);
+
+        List<ProductDTO> resultDTOs = new ArrayList<>();
+        for (ProductEntity entity : entities) {
+            resultDTOs.add(productDTOConverter.toProductDTO(entity));
+        }
+        return resultDTOs;
+    }
+
+    @Override
+    @Transactional
+    public ProductDTO createProduct(Map<String, Object> body) {
+        ProductSearchBuilder productSearchBuilder = productSearchBuilderConverter.bodyToBuilder(body);
+        if (productRepository.existsByTitleAndDeletedFalse(productSearchBuilder.getTitle())) {
+            throw new DuplicateRecordException("Product with name '" + productSearchBuilder.getTitle() + "' already " +
+                    "existed");
+        }
+
+        ProductEntity productEntity = new ProductEntity();
+        productEntity.setTitle(productSearchBuilder.getTitle());
+        productEntity.setProduct_info(productSearchBuilder.getProductInfo());
+        productEntity.setPrice(productSearchBuilder.getPrice());
+        productEntity.setStock(productSearchBuilder.getStock());
+        productEntity.setCreated_at(LocalDateTime.now());
+        productEntity.setUpdated_at(LocalDateTime.now());
+        productEntity.setDeleted(false);
+
+        SellerEntity seller = sellerRepository.findBySellerName(productSearchBuilder.getSellerName());
+        if (seller == null) {
+            seller = new SellerEntity();
+            seller.setSeller_name(productSearchBuilder.getSellerName());
+            seller.setSeller_info("Auto-created seller");
+            seller = sellerRepository.save(seller);
+        }
+        productEntity.setSeller(seller);
+
+        CategoryEntity category = categoryRepository.findByCateName(productSearchBuilder.getCategoryName());
+        if (category == null) {
+            category = new CategoryEntity();
+            category.setCate_name(productSearchBuilder.getCategoryName());
+            category = categoryRepository.save(category);
+        }
+        productEntity.setCategory(category);
+
+        if (productSearchBuilder.getImages() != null && !productSearchBuilder.getImages().isEmpty()) {
+            List<ProductImageEntity> imageEntities = new ArrayList<>();
+
+            for (String base64Image : productSearchBuilder.getImages()) {
+                if (base64Image != null && !base64Image.isEmpty()) {
+                    String imagePath = ImageUtil.saveImage(base64Image);
+
+                    ProductImageEntity imageEntity = new ProductImageEntity();
+                    imageEntity.setImage_path(imagePath);
+                    imageEntity.setProduct(productEntity);
+                    imageEntities.add(imageEntity);
+                }
+            }
+
+            productEntity.setImages(imageEntities);
+        }
+
+        ProductEntity savedProduct = productRepository.save(productEntity);
+
+        return productDTOConverter.toProductDTO(savedProduct);
+    }
+
+    @Override
+    @Transactional
+    public List<ProductDTO> createListProducts(List<Map<String, Object>> bodyList) {
+        List<ProductEntity> entitiesToProcess = new ArrayList<>();
+
+        for (Map<String, Object> body : bodyList) {
+            ProductSearchBuilder builder = productSearchBuilderConverter.bodyToBuilder(body);
+            String title = builder.getTitle();
+
+            Optional<ProductEntity> existingProductOpt = productRepository.findByTitleIncludeDeleted(title);
+
+            if (existingProductOpt.isPresent()) {
+                ProductEntity existingProduct = existingProductOpt.get();
+
+                if (existingProduct.getDeleted()) {
+                    existingProduct.setProduct_info(builder.getProductInfo());
+                    existingProduct.setPrice(builder.getPrice());
+                    existingProduct.setStock(builder.getStock());
+                    existingProduct.setDeleted(false);
+                    existingProduct.setUpdated_at(LocalDateTime.now());
+
+                    CategoryEntity category = categoryRepository.findByCateName(builder.getCategoryName());
+                    if (category == null) {
+                        category = new CategoryEntity();
+                        category.setCate_name(builder.getCategoryName());
+                        category = categoryRepository.save(category);
+                    }
+                    existingProduct.setCategory(category);
+
+                    SellerEntity seller = sellerRepository.findBySellerName(builder.getSellerName());
+                    if (seller == null) {
+                        seller = new SellerEntity();
+                        seller.setSeller_name(builder.getSellerName());
+                        seller = sellerRepository.save(seller);
+                    }
+                    existingProduct.setSeller(seller);
+
+                    existingProduct.getImages().clear();
+                    if (builder.getImages() != null && !builder.getImages().isEmpty()) {
+                        List<ProductImageEntity> newImages = new ArrayList<>();
+                        for (String base64Image : builder.getImages()) {
+                            String imagePath = ImageUtil.saveImage(base64Image);
+                            ProductImageEntity imageEntity = new ProductImageEntity();
+                            imageEntity.setImage_path(imagePath);
+                            imageEntity.setProduct(existingProduct);
+                            newImages.add(imageEntity);
+                        }
+                        existingProduct.getImages().addAll(newImages);
+                    }
+
+                    entitiesToProcess.add(existingProduct);
+
+                } else {
+                    throw new DuplicateRecordException("Product with name '" + title + "' already existed!");
+                }
+
+            } else {
+                ProductEntity newProduct = new ProductEntity();
+                newProduct.setTitle(title);
+                newProduct.setProduct_info(builder.getProductInfo());
+                newProduct.setPrice(builder.getPrice());
+                newProduct.setStock(builder.getStock());
+                newProduct.setCreated_at(LocalDateTime.now());
+                newProduct.setUpdated_at(LocalDateTime.now());
+                newProduct.setDeleted(false);
+
+                CategoryEntity category = categoryRepository.findByCateName(builder.getCategoryName());
+                if (category == null) {
+                    category = new CategoryEntity();
+                    category.setCate_name(builder.getCategoryName());
+                    category = categoryRepository.save(category);
+                }
+                newProduct.setCategory(category);
+
+                SellerEntity seller = sellerRepository.findBySellerName(builder.getSellerName());
+                if (seller == null) {
+                    seller = new SellerEntity();
+                    seller.setSeller_name(builder.getSellerName());
+                    seller = sellerRepository.save(seller);
+                }
+                newProduct.setSeller(seller);
+
+                if (builder.getImages() != null && !builder.getImages().isEmpty()) {
+                    List<ProductImageEntity> imageEntities = new ArrayList<>();
+                    for (String base64Image : builder.getImages()) {
+                        String imagePath = ImageUtil.saveImage(base64Image);
+                        ProductImageEntity imageEntity = new ProductImageEntity();
+                        imageEntity.setImage_path(imagePath);
+                        imageEntity.setProduct(newProduct);
+                        imageEntities.add(imageEntity);
+                    }
+                    newProduct.setImages(imageEntities);
+                }
+                entitiesToProcess.add(newProduct);
+            }
+        }
+
+        List<ProductEntity> savedEntities = productRepository.saveAll(entitiesToProcess);
+
+        List<ProductDTO> resultDTOs = new ArrayList<>();
+        for (ProductEntity savedEntity : savedEntities) {
+            resultDTOs.add(productDTOConverter.toProductDTO(savedEntity));
+        }
+        return resultDTOs;
+    }
+
+    @Override
+    @Transactional
+    public ProductDTO updateProduct(Integer id, Map<String, Object> body) {
+        ProductEntity product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with ID: " + id));
+
+        if (body.containsKey("title")) {
+            product.setTitle((String) body.get("title"));
+        }
+        if (body.containsKey("product_info")) {
+            product.setProduct_info((String) body.get("product_info"));
+        }
+        if (body.containsKey("price")) {
+            product.setPrice((Integer) body.get("price"));
+        }
+        if (body.containsKey("stock")) {
+            product.setStock((Integer) body.get("stock"));
+        }
+        if (body.containsKey("cate_name")) {
+            String categoryName = (String) body.get("cate_name");
+            CategoryEntity category = categoryRepository.findByCateName(categoryName);
+            if (category == null) {
+                category = new CategoryEntity();
+                category.setCate_name(categoryName);
+                category = categoryRepository.save(category);
+            }
+            product.setCategory(category);
+        }
+        if (body.containsKey("seller_name")) {
+            String sellerName = (String) body.get("seller_name");
+            SellerEntity seller = sellerRepository.findBySellerName(sellerName);
+            if (seller == null) {
+                seller = new SellerEntity();
+                seller.setSeller_name(sellerName);
+                seller = sellerRepository.save(seller);
+            }
+            product.setSeller(seller);
+        }
+
+        if (body.containsKey("images")) {
+            product.getImages().clear();
+
+            List<String> base64Images = (List<String>) body.get("images");
+            if (base64Images != null && !base64Images.isEmpty()) {
+                List<ProductImageEntity> newImages = new ArrayList<>();
+                for (String base64Image : base64Images) {
+                    String imagePath = ImageUtil.saveImage(base64Image);
+                    ProductImageEntity imageEntity = new ProductImageEntity();
+                    imageEntity.setImage_path(imagePath);
+                    imageEntity.setProduct(product);
+                    newImages.add(imageEntity);
+                }
+                product.getImages().addAll(newImages);
+            }
+        }
+
+        product.setUpdated_at(LocalDateTime.now());
+        ProductEntity updatedProduct = productRepository.save(product);
+
+        return productDTOConverter.toProductDTO(updatedProduct);
+    }
+
+    @Override
+    @Transactional
+    public void deleteProduct(Integer id) {
+        // ✅ SECURE: Soft Delete — không xóa vĩnh viễn, chỉ đánh dấu deleted=true
+        ProductEntity product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with ID: " + id));
+        product.setDeleted(true);
+        product.setUpdated_at(LocalDateTime.now());
+        productRepository.save(product);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDTO> searchProductsForChatbot(Map<String, Object> aiParams) {
+        Specification<ProductEntity> spec = ChatbotProductSpecification.findByAiCriteria(aiParams);
+
+        List<ProductEntity> entities = productRepository.findAll(spec);
+
+        List<ProductDTO> resultDTOs = new ArrayList<>();
+        for (ProductEntity entity : entities) {
+            resultDTOs.add(productDTOConverter.toProductDTO(entity));
+        }
+        return resultDTOs;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDTO> getTopBestSellerProducts(int limit) {
+        if (limit <= 0) {
+            limit = 10; // default nếu FE không truyền hoặc truyền bậy
+        }
+
+        // 1. Lấy list productId đã sort theo số user mua giảm dần
+        List<com.backend.backend.model.product.BestSellerIdOnly> bestIds =
+                productRepository.findBestSellerIds();
+
+        // 2. Cắt top N id
+        List<Integer> ids = bestIds.stream()
+                .map(com.backend.backend.model.product.BestSellerIdOnly::getProductId)
+                .limit(limit)
+                .toList();
+
+        if (ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 3. Lấy full ProductEntity theo id
+        List<ProductEntity> entities = productRepository.findAllById(ids);
+
+        // 4. Đưa về map để giữ đúng thứ tự best-seller
+        Map<Integer, ProductDTO> dtoMap = new java.util.HashMap<>();
+        for (ProductEntity entity : entities) {
+            dtoMap.put(entity.getId(), productDTOConverter.toProductDTO(entity));
+        }
+
+        // 5. Trả list DTO theo đúng thứ tự ids (bán chạy nhất → ít hơn)
+        List<ProductDTO> result = new ArrayList<>();
+        for (Integer id : ids) {
+            ProductDTO dto = dtoMap.get(id);
+            if (dto != null) {
+                result.add(dto);
+            }
+        }
+
+        return result;
+    }
+
+        @Override
+    @Transactional(readOnly = true)
+    public List<ProductDTO> getTopRatedProducts(int limit) {
+        if (limit <= 0) {
+            limit = 10; // default
+        }
+
+        // 1. Lấy danh sách productId đã sort theo avg star giảm dần
+        List<com.backend.backend.model.product.BestRatedIdOnly> bestIds =
+                productRepository.findBestRatedIds();
+
+        // 2. Cắt top N id
+        List<Integer> ids = bestIds.stream()
+                .map(com.backend.backend.model.product.BestRatedIdOnly::getProductId)
+                .limit(limit)
+                .toList();
+
+        if (ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 3. Lấy full ProductEntity theo id
+        List<ProductEntity> entities = productRepository.findAllById(ids);
+
+        // 4. Đưa vào map để khôi phục đúng thứ tự theo ids
+        java.util.Map<Integer, ProductDTO> dtoMap = new java.util.HashMap<>();
+        for (ProductEntity entity : entities) {
+            dtoMap.put(entity.getId(), productDTOConverter.toProductDTO(entity));
+        }
+
+        // 5. Trả kết quả theo đúng thứ tự top-rated
+        List<ProductDTO> result = new ArrayList<>();
+        for (Integer id : ids) {
+            ProductDTO dto = dtoMap.get(id);
+            if (dto != null) {
+                result.add(dto);
+            }
+        }
+
+        return result;
+    }
+
+    // ============================================================
+    // ✅ SECURE: Methods chấp nhận validated DTO (đã qua @Pattern/@Valid)
+    // ============================================================
+
+    @Override
+    @Transactional
+    public ProductDTO createProductFromRequest(ProductCreateRequest request) {
+        if (productRepository.existsByTitleAndDeletedFalse(request.getTitle())) {
+            throw new DuplicateRecordException("Product with name '" + request.getTitle() + "' already existed");
+        }
+
+        ProductEntity productEntity = new ProductEntity();
+        productEntity.setTitle(request.getTitle());
+        productEntity.setProduct_info(request.getProduct_info());
+        productEntity.setPrice(request.getPrice());
+        productEntity.setStock(request.getStock());
+        productEntity.setCreated_at(LocalDateTime.now());
+        productEntity.setUpdated_at(LocalDateTime.now());
+        productEntity.setDeleted(false);
+
+        SellerEntity seller = sellerRepository.findBySellerName(request.getSeller_name());
+        if (seller == null) {
+            seller = new SellerEntity();
+            seller.setSeller_name(request.getSeller_name());
+            seller.setSeller_info("Auto-created seller");
+            seller = sellerRepository.save(seller);
+        }
+        productEntity.setSeller(seller);
+
+        CategoryEntity category = categoryRepository.findByCateName(request.getCate_name());
+        if (category == null) {
+            category = new CategoryEntity();
+            category.setCate_name(request.getCate_name());
+            category = categoryRepository.save(category);
+        }
+        productEntity.setCategory(category);
+
+        if (request.getImages() != null && !request.getImages().isEmpty()) {
+            List<ProductImageEntity> imageEntities = new ArrayList<>();
+            for (String base64Image : request.getImages()) {
+                if (base64Image != null && !base64Image.isEmpty()) {
+                    String imagePath = ImageUtil.saveImage(base64Image);
+                    ProductImageEntity imageEntity = new ProductImageEntity();
+                    imageEntity.setImage_path(imagePath);
+                    imageEntity.setProduct(productEntity);
+                    imageEntities.add(imageEntity);
+                }
+            }
+            productEntity.setImages(imageEntities);
+        }
+
+        ProductEntity savedProduct = productRepository.save(productEntity);
+        return productDTOConverter.toProductDTO(savedProduct);
+    }
+
+    @Override
+    @Transactional
+    public List<ProductDTO> createListProductsFromRequest(List<ProductCreateRequest> requestList) {
+        List<ProductEntity> entitiesToProcess = new ArrayList<>();
+
+        for (ProductCreateRequest request : requestList) {
+            String title = request.getTitle();
+            Optional<ProductEntity> existingProductOpt = productRepository.findByTitleIncludeDeleted(title);
+
+            if (existingProductOpt.isPresent()) {
+                ProductEntity existingProduct = existingProductOpt.get();
+                if (existingProduct.getDeleted()) {
+                    existingProduct.setProduct_info(request.getProduct_info());
+                    existingProduct.setPrice(request.getPrice());
+                    existingProduct.setStock(request.getStock());
+                    existingProduct.setDeleted(false);
+                    existingProduct.setUpdated_at(LocalDateTime.now());
+
+                    CategoryEntity category = categoryRepository.findByCateName(request.getCate_name());
+                    if (category == null) {
+                        category = new CategoryEntity();
+                        category.setCate_name(request.getCate_name());
+                        category = categoryRepository.save(category);
+                    }
+                    existingProduct.setCategory(category);
+
+                    SellerEntity seller = sellerRepository.findBySellerName(request.getSeller_name());
+                    if (seller == null) {
+                        seller = new SellerEntity();
+                        seller.setSeller_name(request.getSeller_name());
+                        seller = sellerRepository.save(seller);
+                    }
+                    existingProduct.setSeller(seller);
+
+                    existingProduct.getImages().clear();
+                    if (request.getImages() != null && !request.getImages().isEmpty()) {
+                        List<ProductImageEntity> newImages = new ArrayList<>();
+                        for (String base64Image : request.getImages()) {
+                            String imagePath = ImageUtil.saveImage(base64Image);
+                            ProductImageEntity imageEntity = new ProductImageEntity();
+                            imageEntity.setImage_path(imagePath);
+                            imageEntity.setProduct(existingProduct);
+                            newImages.add(imageEntity);
+                        }
+                        existingProduct.getImages().addAll(newImages);
+                    }
+                    entitiesToProcess.add(existingProduct);
+                } else {
+                    throw new DuplicateRecordException("Product with name '" + title + "' already existed!");
+                }
+            } else {
+                ProductEntity newProduct = new ProductEntity();
+                newProduct.setTitle(title);
+                newProduct.setProduct_info(request.getProduct_info());
+                newProduct.setPrice(request.getPrice());
+                newProduct.setStock(request.getStock());
+                newProduct.setCreated_at(LocalDateTime.now());
+                newProduct.setUpdated_at(LocalDateTime.now());
+                newProduct.setDeleted(false);
+
+                CategoryEntity category = categoryRepository.findByCateName(request.getCate_name());
+                if (category == null) {
+                    category = new CategoryEntity();
+                    category.setCate_name(request.getCate_name());
+                    category = categoryRepository.save(category);
+                }
+                newProduct.setCategory(category);
+
+                SellerEntity seller = sellerRepository.findBySellerName(request.getSeller_name());
+                if (seller == null) {
+                    seller = new SellerEntity();
+                    seller.setSeller_name(request.getSeller_name());
+                    seller = sellerRepository.save(seller);
+                }
+                newProduct.setSeller(seller);
+
+                if (request.getImages() != null && !request.getImages().isEmpty()) {
+                    List<ProductImageEntity> imageEntities = new ArrayList<>();
+                    for (String base64Image : request.getImages()) {
+                        String imagePath = ImageUtil.saveImage(base64Image);
+                        ProductImageEntity imageEntity = new ProductImageEntity();
+                        imageEntity.setImage_path(imagePath);
+                        imageEntity.setProduct(newProduct);
+                        imageEntities.add(imageEntity);
+                    }
+                    newProduct.setImages(imageEntities);
+                }
+                entitiesToProcess.add(newProduct);
+            }
+        }
+
+        List<ProductEntity> savedEntities = productRepository.saveAll(entitiesToProcess);
+        List<ProductDTO> resultDTOs = new ArrayList<>();
+        for (ProductEntity savedEntity : savedEntities) {
+            resultDTOs.add(productDTOConverter.toProductDTO(savedEntity));
+        }
+        return resultDTOs;
+    }
+
+    @Override
+    @Transactional
+    public ProductDTO updateProductFromRequest(Integer id, ProductUpdateRequest request) {
+        ProductEntity product = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found with ID: " + id));
+
+        if (request.getTitle() != null) {
+            product.setTitle(request.getTitle());
+        }
+        if (request.getProduct_info() != null) {
+            product.setProduct_info(request.getProduct_info());
+        }
+        if (request.getPrice() != null) {
+            product.setPrice(request.getPrice());
+        }
+        if (request.getStock() != null) {
+            product.setStock(request.getStock());
+        }
+        if (request.getCate_name() != null) {
+            CategoryEntity category = categoryRepository.findByCateName(request.getCate_name());
+            if (category == null) {
+                category = new CategoryEntity();
+                category.setCate_name(request.getCate_name());
+                category = categoryRepository.save(category);
+            }
+            product.setCategory(category);
+        }
+        if (request.getSeller_name() != null) {
+            SellerEntity seller = sellerRepository.findBySellerName(request.getSeller_name());
+            if (seller == null) {
+                seller = new SellerEntity();
+                seller.setSeller_name(request.getSeller_name());
+                seller = sellerRepository.save(seller);
+            }
+            product.setSeller(seller);
+        }
+        if (request.getImages() != null) {
+            product.getImages().clear();
+            if (!request.getImages().isEmpty()) {
+                List<ProductImageEntity> newImages = new ArrayList<>();
+                for (String base64Image : request.getImages()) {
+                    String imagePath = ImageUtil.saveImage(base64Image);
+                    ProductImageEntity imageEntity = new ProductImageEntity();
+                    imageEntity.setImage_path(imagePath);
+                    imageEntity.setProduct(product);
+                    newImages.add(imageEntity);
+                }
+                product.getImages().addAll(newImages);
+            }
+        }
+
+        product.setUpdated_at(LocalDateTime.now());
+        ProductEntity updatedProduct = productRepository.save(product);
+        return productDTOConverter.toProductDTO(updatedProduct);
+    }
+
+}
+
