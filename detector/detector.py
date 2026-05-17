@@ -5,7 +5,7 @@ import mysql.connector
 from collections import defaultdict, deque
 
 # Config via env
-ADMIN_URL = os.environ.get('ADMIN_URL', 'http://reverse-proxy:8080/admin/ban')
+ADMIN_URL = os.environ.get('ADMIN_URL', 'http://reverse-proxy:8888/admin/ban')
 TOKEN = os.environ.get('PROXY_ADMIN_TOKEN', '')
 POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '10'))
 WINDOW_SECONDS = int(os.environ.get('WINDOW_SECONDS', '300'))  # 5 minutes

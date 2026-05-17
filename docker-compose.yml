@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     environment:
       - PROXY_ADMIN_TOKEN=${PROXY_ADMIN_TOKEN}
-      - ADMIN_URL=http://reverse-proxy:8080/admin/ban
+      - ADMIN_URL=http://reverse-proxy:8888/admin/ban
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - MYSQL_USER=root

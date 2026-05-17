@@ -130,4 +130,12 @@ def list_bans():
     return jsonify({'bans': result})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(('0.0.0.0', 8888))
+        s.close()
+        app.run(host='0.0.0.0', port=8888)
+    except OSError:
+        print('[admin.py] Port 8888 already in use, exiting.')
+        s.close()

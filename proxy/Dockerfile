@@ -1,25 +1,37 @@
-FROM python:3.11-alpine
+FROM owasp/modsecurity-crs:nginx-alpine
 
-# Install nginx and dependencies
-RUN apk add --no-cache nginx libxml2 libxslt pcre zlib libgcc curl
+USER root
 
-# Create nginx folders
-RUN mkdir -p /var/cache/nginx /var/run /etc/nginx/sites-enabled
+# Cài đặt Python cho admin.py
+RUN apk add --no-cache python3 py3-pip curl
 
-# Copy configs and app
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY modsecurity/modsecurity.conf /etc/nginx/modsecurity.conf
-COPY modsecurity/crs-setup.conf /etc/nginx/crs-setup.conf
-COPY modsecurity/rules/ /etc/nginx/rules/
-COPY blocked_ips.conf /etc/nginx/blocked_ips.conf
-
-COPY admin.py /opt/proxy/admin.py
-COPY docker-entrypoint.sh /opt/proxy/docker-entrypoint.sh
-RUN chmod +x /opt/proxy/docker-entrypoint.sh
-
-# Install Python dependencies
+# Tạo môi trường ảo cho Python
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir flask redis
 
-EXPOSE 80 8080
+# Copy cấu hình Proxy
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Đảm bảo blocked_ips.conf tồn tại trước khi Nginx include
+RUN touch /etc/nginx/blocked_ips.conf
+COPY blocked_ips.conf /etc/nginx/blocked_ips.conf
 
-ENTRYPOINT ["/opt/proxy/docker-entrypoint.sh"]
+# Copy ModSecurity configs and custom rules into image
+COPY modsecurity /etc/modsecurity
+RUN chmod -R 644 /etc/modsecurity || true
+RUN mkdir -p /etc/modsecurity/rules || true
+
+# Bật ModSecurity (Env Vars cho OWASP CRS)
+ENV MODSEC_RULE_ENGINE=On
+ENV MODSEC_REQ_BODY_ACCESS=On
+ENV MODSEC_RESP_BODY_ACCESS=On
+
+# Copy admin API
+COPY admin.py /opt/proxy/admin.py
+
+# Script khởi động admin.py tự động chạy cùng Nginx
+RUN echo '#!/bin/sh' > /docker-entrypoint.d/99-start-admin-api.sh && \
+    echo '/opt/venv/bin/python /opt/proxy/admin.py &' >> /docker-entrypoint.d/99-start-admin-api.sh && \
+    chmod +x /docker-entrypoint.d/99-start-admin-api.sh
+
+EXPOSE 80 8888
