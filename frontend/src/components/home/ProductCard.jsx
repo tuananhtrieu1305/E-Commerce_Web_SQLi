@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { BACKEND_URL } from "../../utils/config";
+import { STATIC_URL } from "../../utils/config";
 
 export default function ProductCard({
   id,
@@ -69,7 +69,7 @@ export default function ProductCard({
         <div className="absolute inset-0 bg-gradient-to-br from-slate-100/40 to-transparent backdrop-blur-sm" />
         {imageUrl ? (
           <img
-            src={`${BACKEND_URL}${imageUrl}`}
+            src={`${STATIC_URL}${imageUrl}`}
             alt={title}
             className="relative w-full h-full object-cover"
           />

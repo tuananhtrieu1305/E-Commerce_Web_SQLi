@@ -16,7 +16,7 @@ import ChatBotLogo from "../../assets/chatbot/Logo.png";
 import CloseIcon from "../../assets/chatbot/close_icon.svg";
 import Anonymous from "../../assets/profilePics/Anonymous.png";
 import { useNavigate } from "react-router-dom";
-import { BACKEND_URL } from "../../utils/config";
+import { STATIC_URL } from "../../utils/config";
 
 const { Text } = Typography;
 
@@ -163,7 +163,7 @@ const ChatbotFloat = () => {
                         src={
                           product.imagePaths !== null &&
                           product.imagePaths.length > 0
-                            ? `${BACKEND_URL}${
+                            ? `${STATIC_URL}${
                                 product.imagePaths[0].image_path ||
                                 product.imagePaths[0]
                               }`

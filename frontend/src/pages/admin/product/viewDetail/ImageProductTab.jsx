@@ -1,5 +1,5 @@
 import { Carousel, Image, Empty } from "antd";
-import { BACKEND_URL } from "../../../../utils/config";
+import { STATIC_URL } from "../../../../utils/config";
 
 const ImageProductTab = (props) => {
   const { productDataDetail } = props;
@@ -13,7 +13,7 @@ const ImageProductTab = (props) => {
     <div className="w-[800px]">
       <Carousel arrows infinite={false}>
         {images.map((image) => {
-          const image_url = `${BACKEND_URL}${
+          const image_url = `${STATIC_URL}${
             image.image_path
           }`;
           return (

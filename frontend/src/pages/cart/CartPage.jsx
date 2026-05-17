@@ -13,7 +13,7 @@ import {
   Gift,
   ArrowLeft,
 } from "lucide-react"; // Thêm ArrowLeft
-import { BACKEND_URL } from "../../utils/config";
+import { STATIC_URL } from "../../utils/config";
 
 export default function CartPage() {
   const {
@@ -245,7 +245,7 @@ export default function CartPage() {
                     <div className="flex-shrink-0">
                       <div className="relative w-28 h-28 rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 group-hover:scale-105 transition-transform duration-300">
                         <img
-                          src={`${BACKEND_URL}${
+                          src={`${STATIC_URL}${
                             item.image
                           }`}
                           alt={`Ảnh sản phẩm ${item.productId}`}

@@ -15,7 +15,7 @@ import {
 import { useState, useEffect } from "react";
 import { PlusOutlined } from "@ant-design/icons";
 import { useProductDropdowns } from "../../hooks/product/useProductDropdowns";
-import { BACKEND_URL } from "../../utils/config";
+import { STATIC_URL } from "../../utils/config";
 
 const ProductForm = (props) => {
   const { form, handleFinish, initialData } = props;
@@ -53,7 +53,7 @@ const ProductForm = (props) => {
           uid: img.id,
           name: img.image_path.split("/").pop(),
           status: "done",
-          url: `${BACKEND_URL}${img.image_path}`,
+          url: `${STATIC_URL}${img.image_path}`,
         }));
         setFileList(oldImages);
       }

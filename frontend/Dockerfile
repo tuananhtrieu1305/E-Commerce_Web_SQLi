@@ -22,7 +22,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 # Copy entrypoint script (inject runtime config)
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Custom Nginx config cho SPA (React Router)
 RUN echo 'server { \

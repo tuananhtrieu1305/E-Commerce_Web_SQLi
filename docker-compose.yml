@@ -28,6 +28,38 @@ services:
     networks:
       - ecommerce-net
 
+  detector:
+    build:
+      context: ./detector
+      dockerfile: Dockerfile
+    container_name: ecommerce-detector
+    restart: unless-stopped
+    environment:
+      - PROXY_ADMIN_TOKEN=${PROXY_ADMIN_TOKEN}
+      - ADMIN_URL=http://reverse-proxy:8080/admin/ban
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE_VULNERABLE=${MYSQL_DATABASE_VULNERABLE}
+      - MYSQL_DATABASE_SECURE=${MYSQL_DATABASE_SECURE}
+    volumes:
+      - ./database:/data
+    depends_on:
+      - reverse-proxy
+      - mysql
+    networks:
+      - ecommerce-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - ecommerce-net
+
   # ──────────────────────────────────────────────
   # Backend Vulnerable — Port 8081
   # Dùng root DB user, string concat, no validation
@@ -49,6 +81,12 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/api/category"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s    # Spring Boot cần ~60s để start
     networks:
       - ecommerce-net
 
@@ -73,6 +111,38 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/api/category"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s    # Spring Boot cần ~60s để start
+    networks:
+      - ecommerce-net
+
+  backend-secure-2:
+    build:
+      context: ./backend-secure
+      dockerfile: Dockerfile
+    container_name: ecommerce-backend-secure-2
+    restart: unless-stopped
+    ports:
+      - "8083:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE_SECURE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: app_secure
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/api/category"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
     networks:
       - ecommerce-net
 
@@ -93,7 +163,55 @@ services:
       # :8081 = vulnerable, :8082 = secure
       VITE_BACKEND_URL: ${VITE_BACKEND_URL}
     depends_on:
-      - backend-secure
+      backend-secure:
+        condition: service_healthy
+      backend-secure-2:
+        condition: service_healthy
+      backend-vulnerable:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+
+  # ──────────────────────────────────────────────
+  # Reverse Proxy (Nginx + ModSecurity prototype)
+  # ──────────────────────────────────────────────
+  reverse-proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: ecommerce-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - ADMIN_TOKEN=${PROXY_ADMIN_TOKEN}
+    depends_on:
+      frontend:
+        condition: service_started
+      load-balancer:
+        condition: service_healthy
+    networks:
+      - ecommerce-net
+
+  load-balancer:
+    build:
+      context: ./lb
+      dockerfile: Dockerfile
+    container_name: ecommerce-load-balancer
+    restart: unless-stopped
+    depends_on:
+      backend-secure:
+        condition: service_healthy
+      backend-secure-2:
+        condition: service_healthy
+      backend-vulnerable:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - ecommerce-net
 

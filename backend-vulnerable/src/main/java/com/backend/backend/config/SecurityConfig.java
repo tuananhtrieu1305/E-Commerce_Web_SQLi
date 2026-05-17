@@ -41,7 +41,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:5173")); // FE React
+        configuration.setAllowedOrigins(Arrays.asList(
+            "http://localhost:3000",   // Vite dev server
+            "http://localhost:5173",   // Docker FE mapped port
+            "http://localhost"         // Qua reverse-proxy port 80 (Docker production)
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET","POST","PUT","DELETE","OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

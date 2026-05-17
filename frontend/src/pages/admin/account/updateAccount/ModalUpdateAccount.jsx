@@ -12,7 +12,7 @@ import {
 import { useEffect, useState } from "react";
 import { LoadingOutlined, PlusOutlined } from "@ant-design/icons";
 import { updateAccount } from "../../../../services/AccountAPI";
-import { BACKEND_URL } from "../../../../utils/config";
+import { STATIC_URL } from "../../../../utils/config";
 
 const ModalUpdateAccount = (props) => {
   const {
@@ -47,7 +47,7 @@ const ModalUpdateAccount = (props) => {
             uid: "-1",
             name: accountDataDetail.profile.image,
             status: "done",
-            url: `${BACKEND_URL}/uploads/${
+            url: `${STATIC_URL}/uploads/${
               accountDataDetail.profile.image
             }`,
           },

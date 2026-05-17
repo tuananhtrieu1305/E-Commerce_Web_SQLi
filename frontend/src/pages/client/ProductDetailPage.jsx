@@ -20,7 +20,7 @@ import { useParams } from "react-router-dom";
 import { message } from "antd";
 import ProductReviews from "../../components/product/ProductReview";
 import { apiAddItem } from "../../services/cartService";
-import { BACKEND_URL } from "../../utils/config";
+import { BACKEND_URL, STATIC_URL } from "../../utils/config";
 // Mock template cho product (dùng làm default + bổ sung field không có trong BE)
 const mockProductTemplate = {
   id: null,
@@ -117,7 +117,7 @@ export default function ProductDetailPage() {
           if (apiProduct.imagePaths && apiProduct.imagePaths.length > 0) {
             imagesFromApi = apiProduct.imagePaths.map(
               (img) =>
-                `${BACKEND_URL}${img.image_path}` || ""
+                `${STATIC_URL}${img.image_path}` || ""
             );
           }
 
