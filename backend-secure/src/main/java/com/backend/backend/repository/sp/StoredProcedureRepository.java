@@ -125,8 +125,8 @@ public class StoredProcedureRepository {
 
         List<Object[]> rows = q.getResultList();
         return mapRows(rows,
-                "id", "event_time", "table_name", "operation",
-                "affected_id", "old_value", "new_value", "notes");
+            "id", "event_time", "db_name", "table_name", "operation",
+            "affected_id", "old_value", "new_value", "notes", "severity");
     }
 
     // ── Helper ─────────────────────────────────────────────────────────────

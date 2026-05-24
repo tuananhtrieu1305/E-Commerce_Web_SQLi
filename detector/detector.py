@@ -26,6 +26,12 @@ events = defaultdict(deque)  # ip -> deque of timestamps
 already_banned = set()
 last_id = { 'vuln': 0, 'secure': 0 }
 
+SEVERITY_WEIGHT = {
+    'LOW': 1,
+    'MEDIUM': 2,
+    'CRITICAL': 3,
+}
+
 def ban_ip(ip):
     if not TOKEN:
         print('PROXY_ADMIN_TOKEN not set; cannot ban')
@@ -57,21 +63,23 @@ def poll_db():
             cursor = conn.cursor(dictionary=True)
             for key, db in (('vuln', MYSQL_DATABASE_VULN), ('secure', MYSQL_DATABASE_SECURE)):
                 try:
-                    cursor.execute(f"SELECT id, event_time, ip, payload FROM {db}.security_audit_log WHERE id > %s ORDER BY id ASC", (last_id[key],))
+                    cursor.execute(f"SELECT id, event_time, db_name, ip, severity, payload FROM {db}.security_audit_log WHERE id > %s ORDER BY id ASC", (last_id[key],))
                     rows = cursor.fetchall()
                     for row in rows:
                         rid = row.get('id')
                         ts = row.get('event_time').timestamp() if row.get('event_time') else time.time()
                         ip = row.get('ip') or 'unknown'
+                        severity = (row.get('severity') or 'LOW').upper()
                         if ip == 'unknown':
                             # skip if no IP available; could try to extract from payload later
                             continue
                         dq = events[ip]
-                        dq.append(ts)
+                        dq.append((ts, SEVERITY_WEIGHT.get(severity, 1)))
                         now = time.time()
-                        while dq and dq[0] < now - WINDOW_SECONDS:
+                        while dq and dq[0][0] < now - WINDOW_SECONDS:
                             dq.popleft()
-                        if len(dq) >= THRESHOLD:
+                        weighted_score = sum(weight for _, weight in dq)
+                        if severity == 'CRITICAL' or weighted_score >= THRESHOLD:
                             ban_ip(ip)
                         last_id[key] = max(last_id[key], rid)
                 except mysql.connector.Error as e:

@@ -11,8 +11,21 @@ BEFORE INSERT ON comments
 FOR EACH ROW
 BEGIN
   IF NEW.content REGEXP 'union[[:space:]]+select|select[[:space:]].*from|information_schema|--|;[[:space:]]*drop[[:space:]]+table' THEN
-    INSERT INTO security_audit_log(table_name, operation, notes, ip, payload, reason)
-    VALUES('comments', 'SQLI_ATTEMPT', CONCAT('SQLi in comment content: ', LEFT(NEW.content, 200)), 'unknown', NEW.content, 'SQLi pattern detected');
+    INSERT INTO security_audit_log(db_name, table_name, operation, notes, severity, ip, payload, reason)
+    VALUES(
+      'e_commerce_secure',
+      'comments',
+      'SQLI_ATTEMPT',
+      CONCAT('SQLi in comment content: ', LEFT(NEW.content, 200)),
+      CASE
+        WHEN NEW.content REGEXP 'union[[:space:]]+select|information_schema|;[[:space:]]*drop[[:space:]]+table' THEN 'CRITICAL'
+        WHEN NEW.content REGEXP 'select[[:space:]].*from' THEN 'MEDIUM'
+        ELSE 'LOW'
+      END,
+      'unknown',
+      NEW.content,
+      'SQLi pattern detected'
+    );
   END IF;
 END$$
 DELIMITER ;
@@ -27,8 +40,21 @@ BEFORE INSERT ON comments
 FOR EACH ROW
 BEGIN
   IF NEW.content REGEXP 'union[[:space:]]+select|select[[:space:]].*from|information_schema|--|;[[:space:]]*drop[[:space:]]+table' THEN
-    INSERT INTO security_audit_log(table_name, operation, notes, ip, payload, reason)
-    VALUES('comments', 'SQLI_ATTEMPT', CONCAT('SQLi in comment content: ', LEFT(NEW.content, 200)), 'unknown', NEW.content, 'SQLi pattern detected');
+    INSERT INTO security_audit_log(db_name, table_name, operation, notes, severity, ip, payload, reason)
+    VALUES(
+      'e_commerce_vulnerable',
+      'comments',
+      'SQLI_ATTEMPT',
+      CONCAT('SQLi in comment content: ', LEFT(NEW.content, 200)),
+      CASE
+        WHEN NEW.content REGEXP 'union[[:space:]]+select|information_schema|;[[:space:]]*drop[[:space:]]+table' THEN 'CRITICAL'
+        WHEN NEW.content REGEXP 'select[[:space:]].*from' THEN 'MEDIUM'
+        ELSE 'LOW'
+      END,
+      'unknown',
+      NEW.content,
+      'SQLi pattern detected'
+    );
   END IF;
 END$$
 DELIMITER ;

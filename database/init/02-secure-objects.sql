@@ -39,12 +39,17 @@ ALTER TABLE comments
 CREATE TABLE IF NOT EXISTS security_audit_log (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     event_time  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    db_name     VARCHAR(128)  DEFAULT NULL,
     table_name  VARCHAR(50)  NOT NULL,
     operation   VARCHAR(30)  NOT NULL,
     affected_id INT          DEFAULT NULL,
     old_value   TEXT         DEFAULT NULL,
     new_value   TEXT         DEFAULT NULL,
-    notes       TEXT         DEFAULT NULL
+    notes       TEXT         DEFAULT NULL,
+    severity    ENUM('LOW', 'MEDIUM', 'CRITICAL') NOT NULL DEFAULT 'LOW',
+    ip          VARCHAR(64)  DEFAULT NULL,
+    payload     TEXT         DEFAULT NULL,
+    reason      VARCHAR(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -168,13 +173,17 @@ CREATE TRIGGER trg_audit_role_change
 BEFORE UPDATE ON accounts
 FOR EACH ROW
 BEGIN
+    DECLARE v_severity VARCHAR(10) DEFAULT 'LOW';
+
     IF OLD.role != NEW.role THEN
+        SET v_severity = 'CRITICAL';
         INSERT INTO security_audit_log
-            (table_name, operation, affected_id, old_value, new_value, notes)
+            (db_name, table_name, operation, affected_id, old_value, new_value, notes, severity)
         VALUES
-            ('accounts', 'PRIVILEGE_ESCALATION_ATTEMPT',
+            ('e_commerce_secure', 'accounts', 'PRIVILEGE_ESCALATION_ATTEMPT',
              OLD.id, OLD.role, NEW.role,
-             CONCAT('Username: ', OLD.username, ' — role changed'));
+             CONCAT('Username: ', OLD.username, ' — role changed'),
+             v_severity);
     END IF;
 END$$
 
@@ -184,13 +193,17 @@ CREATE TRIGGER trg_audit_account_mass_delete
 AFTER UPDATE ON accounts
 FOR EACH ROW
 BEGIN
+    DECLARE v_severity VARCHAR(10) DEFAULT 'LOW';
+
     IF OLD.deleted = 0 AND NEW.deleted = 1 THEN
+        SET v_severity = 'MEDIUM';
         INSERT INTO security_audit_log
-            (table_name, operation, affected_id, old_value, new_value, notes)
+            (db_name, table_name, operation, affected_id, old_value, new_value, notes, severity)
         VALUES
-            ('accounts', 'SOFT_DELETE',
+            ('e_commerce_secure', 'accounts', 'SOFT_DELETE',
              OLD.id, 'deleted=0', 'deleted=1',
-             CONCAT('Account soft-deleted: ', OLD.username));
+             CONCAT('Account soft-deleted: ', OLD.username),
+             v_severity);
     END IF;
 END$$
 
@@ -389,8 +402,8 @@ CREATE PROCEDURE sp_get_audit_log(
 BEGIN
     SET @lim = IF(p_limit > 0 AND p_limit <= 1000, p_limit, 50);
     PREPARE stmt FROM
-        'SELECT id, event_time, table_name, operation, affected_id,
-                old_value, new_value, notes
+        'SELECT id, event_time, db_name, table_name, operation, affected_id,
+            old_value, new_value, notes, severity
          FROM security_audit_log
          ORDER BY event_time DESC
          LIMIT ?';

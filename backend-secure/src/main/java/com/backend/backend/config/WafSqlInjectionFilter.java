@@ -23,6 +23,22 @@ public class WafSqlInjectionFilter extends OncePerRequestFilter {
             "(?i)(union\\s+select|select\\s+.*\\s+from|information_schema|--|;\\s*drop\\s+table)"
     );
 
+    private String classifySeverity(String payload) {
+        if (payload == null) {
+            return "LOW";
+        }
+
+        if (payload.matches("(?i).*(union\\s+select|information_schema|;\\s*drop\\s+table).*")) {
+            return "CRITICAL";
+        }
+
+        if (payload.matches("(?i).*(select\\s+.*\\s+from|--).*")) {
+            return "MEDIUM";
+        }
+
+        return "LOW";
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -40,11 +56,11 @@ public class WafSqlInjectionFilter extends OncePerRequestFilter {
 
                 // Ghi log vào security_audit_log để con Bot Detector nhận diện
                 try {
-                    String sql = "INSERT INTO security_audit_log (table_name, operation, ip, payload, reason, notes) " +
-                                 "VALUES (?, ?, ?, ?, ?, ?)";
-                    jdbcTemplate.update(sql, "products_search", "SQLI_ATTEMPT", ip, titleParam, "SQLi pattern detected", "SQLi in search query");
+                    String sql = "INSERT INTO security_audit_log (db_name, table_name, operation, severity, ip, payload, reason, notes) " +
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                    jdbcTemplate.update(sql, "e_commerce_secure", "products_search", "SQLI_ATTEMPT", classifySeverity(titleParam), ip, titleParam, "SQLi pattern detected", "SQLi in search query");
                     System.out.println("[WAF FILTER] Detected SQLi in Search. IP: " + ip);
-                } catch (Exception e) {
+                } catch (org.springframework.dao.DataAccessException e) {
                     System.err.println("Failed to write to audit log: " + e.getMessage());
                 }
                 
