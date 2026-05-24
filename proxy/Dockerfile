@@ -11,7 +11,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir flask redis
 
 # Copy cấu hình Proxy
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN mkdir -p /opt/proxy
+COPY nginx.conf /opt/proxy/nginx.conf
+RUN echo '#!/bin/sh' > /docker-entrypoint.d/98-apply-app-nginx-conf.sh && \
+    echo 'cp /opt/proxy/nginx.conf /etc/nginx/conf.d/default.conf' >> /docker-entrypoint.d/98-apply-app-nginx-conf.sh && \
+    chmod +x /docker-entrypoint.d/98-apply-app-nginx-conf.sh
 # Đảm bảo blocked_ips.conf tồn tại trước khi Nginx include
 RUN touch /etc/nginx/blocked_ips.conf
 COPY blocked_ips.conf /etc/nginx/blocked_ips.conf
@@ -33,5 +37,7 @@ COPY admin.py /opt/proxy/admin.py
 RUN echo '#!/bin/sh' > /docker-entrypoint.d/99-start-admin-api.sh && \
     echo '/opt/venv/bin/python /opt/proxy/admin.py &' >> /docker-entrypoint.d/99-start-admin-api.sh && \
     chmod +x /docker-entrypoint.d/99-start-admin-api.sh
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD curl -fsS http://localhost/healthz || exit 1
 
 EXPOSE 80 8888

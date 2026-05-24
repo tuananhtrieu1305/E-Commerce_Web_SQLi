@@ -1,0 +1,5 @@
+VULNERABLE_BASE_URL = "http://localhost:8081"
+PROTECTED_BASE_URL = "http://localhost/api/secure"
+
+TIMEOUT_SECONDS = 8
+SLOW_RESPONSE_THRESHOLD = 2.0

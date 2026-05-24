@@ -12,7 +12,14 @@ GRANT EXECUTE ON `e_commerce_secure`.* TO 'app_secure'@'%';
 
 -- KHÔNG CÓ: DROP, DELETE, ALTER, CREATE, TRUNCATE, GRANT
 
+-- Demo-only masked reader:
+-- Dùng để chứng minh Security View là boundary đọc dữ liệu an toàn.
+-- User này chỉ đọc được v_accounts_public, không đọc trực tiếp được bảng accounts.
+CREATE USER IF NOT EXISTS 'masked_reader'@'%' IDENTIFIED BY 'MaskedReader@2024';
+GRANT SELECT ON `e_commerce_secure`.`v_accounts_public` TO 'masked_reader'@'%';
+
 FLUSH PRIVILEGES;
 
 -- Verification
 SHOW GRANTS FOR 'app_secure'@'%';
+SHOW GRANTS FOR 'masked_reader'@'%';

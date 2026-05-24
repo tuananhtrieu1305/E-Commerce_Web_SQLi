@@ -1,0 +1,59 @@
+[
+  {
+    "id": "TC-00",
+    "name": "Normal product search",
+    "method": "GET",
+    "path": "/api/product",
+    "param": "title",
+    "payload_group": "normal"
+  },
+  {
+    "id": "TC-01",
+    "name": "Boolean-based SQL Injection",
+    "method": "GET",
+    "path": "/api/product",
+    "param": "title",
+    "payload_group": "boolean_based"
+  },
+  {
+    "id": "TC-02",
+    "name": "Union-based SQL Injection",
+    "method": "GET",
+    "path": "/api/product",
+    "param": "title",
+    "payload_group": "union_based"
+  },
+  {
+    "id": "TC-03",
+    "name": "Error-based SQL Injection",
+    "method": "GET",
+    "path": "/api/product",
+    "param": "title",
+    "payload_group": "error_based"
+  },
+  {
+    "id": "TC-04",
+    "name": "Time-based Blind SQL Injection",
+    "method": "GET",
+    "path": "/api/product",
+    "param": "title",
+    "payload_group": "time_based"
+  },
+  {
+    "id": "TC-05",
+    "name": "ORDER BY Injection",
+    "method": "GET",
+    "path": "/api/product",
+    "param": "sortBy",
+    "payload_group": "order_by"
+  },
+  {
+    "id": "TC-06",
+    "name": "Stored Procedure Defense",
+    "method": "GET",
+    "path": "/api/security/sp-search",
+    "param": "keyword",
+    "payload_group": "union_based"
+    }
+
+]

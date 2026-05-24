@@ -1,0 +1,73 @@
+export const config = {
+  port: Number(process.env.DASHBOARD_API_PORT ?? 9090),
+  allowedOrigins: [
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+  ],
+  targets: {
+    vulnerable: {
+      id: "backend-vulnerable",
+      label: "Backend vulnerable",
+      type: "http",
+      url: "http://localhost:8081",
+      apiPrefix: "",
+      healthPath: "/api/category",
+      timeoutMs: 2500,
+    },
+    secure: {
+      id: "backend-secure",
+      label: "Backend secure",
+      type: "http",
+      url: "http://localhost:8082",
+      apiPrefix: "",
+      healthPath: "/api/category",
+      timeoutMs: 2500,
+    },
+    wafSecure: {
+      id: "waf-secure",
+      label: "WAF secure route",
+      type: "http",
+      url: "http://localhost",
+      internalUrl: "http://127.0.0.1",
+      apiPrefix: "/api/secure",
+      healthPath: "/api/secure/api/product?title=iPhone",
+      timeoutMs: 2500,
+    },
+  },
+  testTimeoutMs: 10000,
+  db: {
+    host: process.env.DASHBOARD_DB_HOST ?? "127.0.0.1",
+    port: Number(process.env.DASHBOARD_DB_PORT ?? 3307),
+    database: process.env.MYSQL_DATABASE_SECURE ?? "e_commerce_secure",
+    adminUser: process.env.DASHBOARD_DB_ADMIN_USER ?? "root",
+    adminPassword: process.env.MYSQL_ROOT_PASSWORD ?? "root123456",
+    maskedReaderUser: process.env.DASHBOARD_DB_MASKED_READER_USER ?? "masked_reader",
+    maskedReaderPassword: process.env.DASHBOARD_DB_MASKED_READER_PASSWORD ?? "MaskedReader@2024",
+  },
+  containers: {
+    mysql: {
+      id: "mysql",
+      label: "MySQL",
+      name: "ecommerce-mysql",
+      type: "docker",
+    },
+    reverseProxy: {
+      id: "reverse-proxy",
+      label: "Reverse proxy / WAF",
+      name: "ecommerce-reverse-proxy",
+      type: "docker",
+    },
+    loadBalancer: {
+      id: "load-balancer",
+      label: "Load balancer",
+      name: "ecommerce-load-balancer",
+      type: "docker",
+    },
+    detector: {
+      id: "detector",
+      label: "Detector",
+      name: "ecommerce-detector",
+      type: "docker",
+    },
+  },
+};

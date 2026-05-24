@@ -14,4 +14,4 @@ ADMIN_PID=$!
 nginx -g "daemon off;"
 
 # When nginx exits, stop admin
-kill $ADMIN_PID || true
+kill "$ADMIN_PID" || true

