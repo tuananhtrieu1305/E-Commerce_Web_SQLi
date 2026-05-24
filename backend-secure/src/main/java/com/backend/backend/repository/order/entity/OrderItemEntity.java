@@ -4,7 +4,7 @@ import com.backend.backend.repository.product.entity.ProductEntity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "order_items")
+@Table(name = "v_order_items")
 public class OrderItemEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

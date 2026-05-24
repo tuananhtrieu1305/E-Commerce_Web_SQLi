@@ -3,7 +3,7 @@ package com.backend.backend.repository.account.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "admins")
+@Table(name = "v_admins")
 public class AdminEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

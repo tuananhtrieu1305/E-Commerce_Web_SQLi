@@ -14,38 +14,49 @@
 USE `e_commerce_secure`;
 
 -- ============================================================
--- PHẦN 1: CHECK CONSTRAINTS
+-- PHẦN 1: CHECK CONSTRAINTS (idempotent — bỏ qua nếu đã tồn tại)
 -- Validate data tại tầng DB — lớp cuối cùng, bypass mọi layer trên
 -- ============================================================
 
 -- Products: price và stock không được âm
 ALTER TABLE products
-    ADD CONSTRAINT chk_product_price CHECK (price >= 0),
-    ADD CONSTRAINT chk_product_stock CHECK (stock >= 0);
+    ADD CONSTRAINT IF NOT EXISTS chk_product_price CHECK (price >= 0),
+    ADD CONSTRAINT IF NOT EXISTS chk_product_stock CHECK (stock >= 0);
 
 -- Orders: phone phải đúng định dạng số 10-11 chữ số
 ALTER TABLE orders
-    ADD CONSTRAINT chk_order_phone CHECK (phone REGEXP '^[0-9]{10,11}$');
+    ADD CONSTRAINT IF NOT EXISTS chk_order_phone CHECK (phone REGEXP '^[0-9]{10,11}$');
 
 -- Comments: star rating phải từ 1-5
 ALTER TABLE comments
-    ADD CONSTRAINT chk_comment_star CHECK (star BETWEEN 1 AND 5);
+    ADD CONSTRAINT IF NOT EXISTS chk_comment_star CHECK (star BETWEEN 1 AND 5);
 
 -- ============================================================
 -- PHẦN 2: AUDIT LOG TABLE
 -- Ghi lại mọi thay đổi nhạy cảm để phát hiện tấn công
 -- ============================================================
 
+-- [SECURITY FIX] Bổ sung cột severity để phân loại mức độ nghiêm trọng của sự kiện:
+--   CRITICAL — app_secure (backend) cố thực hiện thao tác leo thang đặc quyền
+--   HIGH     — thao tác nhạy cảm từ nguồn không xác định
+--   LOW      — tác vụ quản trị bình thường từ Admin/sp_definer/root
 CREATE TABLE IF NOT EXISTS security_audit_log (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    event_time  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    event_time  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     table_name  VARCHAR(50)  NOT NULL,
     operation   VARCHAR(30)  NOT NULL,
     affected_id INT          DEFAULT NULL,
     old_value   TEXT         DEFAULT NULL,
     new_value   TEXT         DEFAULT NULL,
-    notes       TEXT         DEFAULT NULL
+    notes       TEXT         DEFAULT NULL,
+    severity    VARCHAR(20)  NOT NULL DEFAULT 'LOW'
+        COMMENT 'CRITICAL | HIGH | LOW — mức độ nghiêm trọng của sự kiện bảo mật'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Thêm cột severity vào bảng đã tồn tại (idempotent — bỏ qua nếu đã có)
+ALTER TABLE security_audit_log
+    ADD COLUMN IF NOT EXISTS severity VARCHAR(20) NOT NULL DEFAULT 'LOW'
+        COMMENT 'CRITICAL | HIGH | LOW — mức độ nghiêm trọng của sự kiện bảo mật';
 
 -- ============================================================
 -- PHẦN 3: VIEWS
@@ -54,7 +65,7 @@ CREATE TABLE IF NOT EXISTS security_audit_log (
 
 -- View: accounts không có cột password
 -- Demo: UNION SELECT ... FROM v_accounts_public → không leak password hash
-CREATE OR REPLACE VIEW v_accounts_public AS
+CREATE OR REPLACE DEFINER='sp_definer'@'%' SQL SECURITY DEFINER VIEW v_accounts_public AS
 SELECT
     id,
     username,
@@ -66,7 +77,7 @@ SELECT
 FROM accounts;
 
 -- View: chỉ show sản phẩm chưa bị xóa, bỏ seller_id/cate_id raw
-CREATE OR REPLACE VIEW v_products_active AS
+CREATE OR REPLACE DEFINER='sp_definer'@'%' SQL SECURITY DEFINER VIEW v_products_active AS
 SELECT
     p.id,
     p.title,
@@ -82,7 +93,7 @@ LEFT JOIN sellers    s ON p.seller_id = s.id
 WHERE p.deleted = 0;
 
 -- View: order summary — ẩn note và địa chỉ chi tiết, chỉ show aggregate
-CREATE OR REPLACE VIEW v_order_summary AS
+CREATE OR REPLACE DEFINER='sp_definer'@'%' SQL SECURITY DEFINER VIEW v_order_summary AS
 SELECT
     o.id          AS order_id,
     o.user_id,
@@ -104,7 +115,8 @@ GROUP BY o.id, o.user_id, o.total_cost, o.created_at, o.deleted;
 DELIMITER $$
 
 -- ── 4A: Validate product trước INSERT ──────────────────────
-CREATE TRIGGER trg_validate_product_insert
+DROP TRIGGER IF EXISTS trg_validate_product_insert$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_validate_product_insert
 BEFORE INSERT ON products
 FOR EACH ROW
 BEGIN
@@ -119,7 +131,8 @@ BEGIN
 END$$
 
 -- ── 4B: Validate product trước UPDATE ──────────────────────
-CREATE TRIGGER trg_validate_product_update
+DROP TRIGGER IF EXISTS trg_validate_product_update$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_validate_product_update
 BEFORE UPDATE ON products
 FOR EACH ROW
 BEGIN
@@ -135,7 +148,8 @@ END$$
 
 -- ── 4C: Validate account username trước INSERT ─────────────
 -- Từ chối username chứa ký tự SQL injection phổ biến
-CREATE TRIGGER trg_validate_account_insert
+DROP TRIGGER IF EXISTS trg_validate_account_insert$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_validate_account_insert
 BEFORE INSERT ON accounts
 FOR EACH ROW
 BEGIN
@@ -150,7 +164,8 @@ BEGIN
 END$$
 
 -- ── 4D: Validate account username trước UPDATE ─────────────
-CREATE TRIGGER trg_validate_account_update
+DROP TRIGGER IF EXISTS trg_validate_account_update$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_validate_account_update
 BEFORE UPDATE ON accounts
 FOR EACH ROW
 BEGIN
@@ -163,39 +178,108 @@ BEGIN
     END IF;
 END$$
 
--- ── 4E: Audit log — phát hiện thay đổi role (Privilege Escalation) ──
-CREATE TRIGGER trg_audit_role_change
+-- ── 4E: Audit log + Prevent Role Escalation (Dual-Layer Privilege Escalation Prevention) ──
+-- Ngăn chặn backend (nếu bị hack) cố gắng leo thang đặc quyền bằng cách UPDATE role
+-- CURRENT_USER() trả về tên user DB đang thực thi lệnh — không phải JWT user
+--
+-- [SECURITY FIX] Severity Alerting:
+--   - app_secure cố đổi role → severity = 'CRITICAL' + SIGNAL (Hard-Reject)
+--   - Admin/sp_definer/root đổi role → severity = 'LOW' (tác vụ quản trị bình thường)
+--   - Nguồn khác (không thuộc 2 nhóm trên) → severity = 'HIGH' (đáng ngờ)
+DROP TRIGGER IF EXISTS trg_audit_role_change$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_audit_role_change
 BEFORE UPDATE ON accounts
 FOR EACH ROW
 BEGIN
+    DECLARE v_severity VARCHAR(20) DEFAULT 'HIGH';
+
     IF OLD.role != NEW.role THEN
-        INSERT INTO security_audit_log
-            (table_name, operation, affected_id, old_value, new_value, notes)
-        VALUES
-            ('accounts', 'PRIVILEGE_ESCALATION_ATTEMPT',
-             OLD.id, OLD.role, NEW.role,
-             CONCAT('Username: ', OLD.username, ' — role changed'));
+
+        -- [SECURITY FIX] Phân loại severity theo CURRENT_USER()
+        IF CURRENT_USER() REGEXP '^app_secure@' THEN
+            -- Backend (app_secure) cố đổi role → CRITICAL + Hard-Reject ngay lập tức
+            SET v_severity = 'CRITICAL';
+
+            INSERT INTO security_audit_log
+                (table_name, operation, affected_id, old_value, new_value, notes, severity)
+            VALUES
+                ('accounts', 'PRIVILEGE_ESCALATION_ATTEMPT',
+                 OLD.id, OLD.role, NEW.role,
+                 CONCAT('[CRITICAL] Backend user attempted role escalation. Username: ',
+                        OLD.username, ' — executed by: ', CURRENT_USER()),
+                 v_severity);
+
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = '[DB SECURITY] Unauthorized role escalation attempt from backend user';
+
+        ELSEIF CURRENT_USER() REGEXP '^(root|sp_definer|admin)@' THEN
+            -- Tác vụ quản trị hợp lệ → LOW
+            SET v_severity = 'LOW';
+
+            INSERT INTO security_audit_log
+                (table_name, operation, affected_id, old_value, new_value, notes, severity)
+            VALUES
+                ('accounts', 'ROLE_CHANGE',
+                 OLD.id, OLD.role, NEW.role,
+                 CONCAT('[LOW] Admin role change. Username: ',
+                        OLD.username, ' — executed by: ', CURRENT_USER()),
+                 v_severity);
+
+        ELSE
+            -- Nguồn không thuộc whitelist → HIGH, ghi log cảnh báo
+            SET v_severity = 'HIGH';
+
+            INSERT INTO security_audit_log
+                (table_name, operation, affected_id, old_value, new_value, notes, severity)
+            VALUES
+                ('accounts', 'ROLE_CHANGE_SUSPICIOUS',
+                 OLD.id, OLD.role, NEW.role,
+                 CONCAT('[HIGH] Suspicious role change from unrecognized user. Username: ',
+                        OLD.username, ' — executed by: ', CURRENT_USER()),
+                 v_severity);
+        END IF;
+
     END IF;
 END$$
 
 -- ── 4F: Audit log — phát hiện bulk soft-delete tài khoản ───
 -- Nếu trong 1 transaction có hơn 5 tài khoản bị deleted=1, ghi log cảnh báo
-CREATE TRIGGER trg_audit_account_mass_delete
+--
+-- [SECURITY FIX] Severity Alerting:
+--   - app_secure thực hiện soft-delete → severity = 'CRITICAL' (xóa dữ liệu không được phép)
+--   - Admin/sp_definer thực hiện soft-delete → severity = 'LOW' (tác vụ bình thường)
+DROP TRIGGER IF EXISTS trg_audit_account_mass_delete$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_audit_account_mass_delete
 AFTER UPDATE ON accounts
 FOR EACH ROW
 BEGIN
+    DECLARE v_severity VARCHAR(20) DEFAULT 'LOW';
+
     IF OLD.deleted = 0 AND NEW.deleted = 1 THEN
+
+        -- [SECURITY FIX] Phân loại severity theo CURRENT_USER()
+        IF CURRENT_USER() REGEXP '^app_secure@' THEN
+            SET v_severity = 'CRITICAL';
+        ELSEIF CURRENT_USER() REGEXP '^(root|sp_definer|admin)@' THEN
+            SET v_severity = 'LOW';
+        ELSE
+            SET v_severity = 'HIGH';
+        END IF;
+
         INSERT INTO security_audit_log
-            (table_name, operation, affected_id, old_value, new_value, notes)
+            (table_name, operation, affected_id, old_value, new_value, notes, severity)
         VALUES
             ('accounts', 'SOFT_DELETE',
              OLD.id, 'deleted=0', 'deleted=1',
-             CONCAT('Account soft-deleted: ', OLD.username));
+             CONCAT('Account soft-deleted: ', OLD.username,
+                    ' — executed by: ', CURRENT_USER()),
+             v_severity);
     END IF;
 END$$
 
 -- ── 4G: Validate order phone trước INSERT ──────────────────
-CREATE TRIGGER trg_validate_order_phone_insert
+DROP TRIGGER IF EXISTS trg_validate_order_phone_insert$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_validate_order_phone_insert
 BEFORE INSERT ON orders
 FOR EACH ROW
 BEGIN
@@ -206,7 +290,8 @@ BEGIN
 END$$
 
 -- ── 4H: Validate order phone trước UPDATE ──────────────────
-CREATE TRIGGER trg_validate_order_phone_update
+DROP TRIGGER IF EXISTS trg_validate_order_phone_update$$
+CREATE DEFINER='sp_definer'@'%' TRIGGER trg_validate_order_phone_update
 BEFORE UPDATE ON orders
 FOR EACH ROW
 BEGIN
@@ -231,7 +316,8 @@ DELIMITER $$
 --   - LIKE dùng prepared statement parameter (không concat chuỗi)
 --   - ORDER BY dùng allow-list mapping tĩnh (không dùng input trực tiếp)
 -- Demo: sortBy=price; DROP TABLE products-- → CASE không match → fallback an toàn
-CREATE PROCEDURE sp_search_products(
+DROP PROCEDURE IF EXISTS sp_search_products$$
+CREATE DEFINER='sp_definer'@'%' PROCEDURE sp_search_products(
     IN p_keyword  VARCHAR(255),
     IN p_sort     VARCHAR(20),
     IN p_min_price INT,
@@ -249,7 +335,7 @@ BEGIN
         ELSE 'p.created_at DESC'   -- Fallback mặc định an toàn
     END;
 
-    -- ✅ Base query — dùng v_products_active (view đã lọc deleted=0)
+    -- ✅ Base query — dùng products (view đã lọc deleted=0)
     SET @sql = CONCAT(
         'SELECT p.id, p.title, p.product_info, p.price, p.stock, p.created_at, ',
         'c.cate_name, s.seller_name ',
@@ -287,7 +373,8 @@ END$$
 -- ── 5B: sp_get_account_safe ────────────────────────────────
 -- Lookup account an toàn — chỉ trả về public fields, KHÔNG trả về password
 -- Demo: kể cả nếu SQL inject được, chỉ thấy public data
-CREATE PROCEDURE sp_get_account_safe(
+DROP PROCEDURE IF EXISTS sp_get_account_safe$$
+CREATE DEFINER='sp_definer'@'%' PROCEDURE sp_get_account_safe(
     IN p_username VARCHAR(255)
 )
 BEGIN
@@ -304,7 +391,8 @@ END$$
 -- ── 5C: sp_create_order_safe ───────────────────────────────
 -- Tạo order trong transaction với stock check dùng SELECT ... FOR UPDATE
 -- Đảm bảo không có race condition (2 user mua cùng lúc)
-CREATE PROCEDURE sp_create_order_safe(
+DROP PROCEDURE IF EXISTS sp_create_order_safe$$
+CREATE DEFINER='sp_definer'@'%' PROCEDURE sp_create_order_safe(
     IN  p_user_id   INT,
     IN  p_address   VARCHAR(255),
     IN  p_phone     VARCHAR(20),
@@ -383,18 +471,35 @@ END$$
 
 -- ── 5D: sp_get_audit_log ───────────────────────────────────
 -- Xem audit log — chỉ admin dùng, trả về các sự kiện bảo mật gần đây
-CREATE PROCEDURE sp_get_audit_log(
-    IN p_limit INT
+-- [SECURITY FIX] Trả về thêm cột severity để Admin có thể lọc theo mức độ nghiêm trọng
+DROP PROCEDURE IF EXISTS sp_get_audit_log$$
+CREATE DEFINER='sp_definer'@'%' PROCEDURE sp_get_audit_log(
+    IN p_limit    INT,
+    IN p_severity VARCHAR(20)   -- NULL = tất cả; 'CRITICAL'/'HIGH'/'LOW' = lọc theo severity
 )
 BEGIN
     SET @lim = IF(p_limit > 0 AND p_limit <= 1000, p_limit, 50);
-    PREPARE stmt FROM
-        'SELECT id, event_time, table_name, operation, affected_id,
-                old_value, new_value, notes
-         FROM security_audit_log
-         ORDER BY event_time DESC
-         LIMIT ?';
-    EXECUTE stmt USING @lim;
+
+    IF p_severity IS NOT NULL AND p_severity != '' THEN
+        SET @sev = p_severity;
+        PREPARE stmt FROM
+            'SELECT id, event_time, table_name, operation, affected_id,
+                    old_value, new_value, notes, severity
+             FROM security_audit_log
+             WHERE severity = ?
+             ORDER BY event_time DESC
+             LIMIT ?';
+        EXECUTE stmt USING @sev, @lim;
+    ELSE
+        PREPARE stmt FROM
+            'SELECT id, event_time, table_name, operation, affected_id,
+                    old_value, new_value, notes, severity
+             FROM security_audit_log
+             ORDER BY event_time DESC
+             LIMIT ?';
+        EXECUTE stmt USING @lim;
+    END IF;
+
     DEALLOCATE PREPARE stmt;
 END$$
 

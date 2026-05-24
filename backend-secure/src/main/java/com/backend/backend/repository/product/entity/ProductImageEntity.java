@@ -3,7 +3,7 @@ package com.backend.backend.repository.product.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "product_images")
+@Table(name = "v_product_images")
 public class ProductImageEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -12,7 +12,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "comments")
+@Table(name = "v_comments")
 public class CommentEntity {
 
     @Id

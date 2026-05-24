@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "carts")
+@Table(name = "v_carts")
 @Getter @Setter @NoArgsConstructor
 public class Cart {
     @Id

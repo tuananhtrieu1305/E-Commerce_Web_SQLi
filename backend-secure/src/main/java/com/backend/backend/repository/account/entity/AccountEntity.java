@@ -7,8 +7,8 @@ import org.hibernate.annotations.Where;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "accounts")
-@SQLDelete(sql = "UPDATE accounts SET deleted = true WHERE id = ?")
+@Table(name = "v_accounts")
+@SQLDelete(sql = "UPDATE v_accounts SET deleted = true WHERE id = ?")
 @Where(clause = "deleted = false")
 public class AccountEntity {
     @Id

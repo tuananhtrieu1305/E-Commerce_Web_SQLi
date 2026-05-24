@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
-@SQLDelete(sql = "UPDATE orders SET deleted = true WHERE id = ?")
+@Table(name = "v_orders")
+@SQLDelete(sql = "UPDATE v_orders SET deleted = true WHERE id = ?")
 @Where(clause = "deleted = false")
 public class OrderEntity {
     @Id
